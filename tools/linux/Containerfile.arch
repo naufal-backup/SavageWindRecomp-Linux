@@ -18,8 +18,8 @@ RUN pacman-key --init && pacman-key --populate archlinux \
         clang lld llvm \
         # SDL3's video / audio / input backends (it loads them at run time; the headers decide what it can use)
         libx11 libxext libxrandr libxcursor libxi libxss libxfixes libxtst \
-        libxkbcommon wayland wayland-protocols libdecor libegl libglvnd libdrm libgbm \
-        libpulse libasound libpipewire dbus libudev libibus \
+        libxkbcommon wayland wayland-protocols libdecor libglvnd libdrm mesa \
+        libpulse alsa-lib libpipewire dbus systemd-libs libibus \
         vulkan-headers vulkan-icd-loader \
     && rm -rf /var/cache/pacman/pkg/* /var/lib/pacman/sync/*
 

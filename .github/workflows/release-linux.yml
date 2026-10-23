@@ -51,8 +51,8 @@ jobs:
             ca-certificates curl git file xz unzip patchelf make cmake ninja pkgconf nasm python \
             clang lld llvm \
             libx11 libxext libxrandr libxcursor libxi libxss libxfixes libxtst \
-            libxkbcommon wayland wayland-protocols libdecor libegl libglvnd libdrm libgbm \
-            libpulse libasound libpipewire dbus libudev libibus \
+            libxkbcommon wayland wayland-protocols libdecor libglvnd libdrm mesa \
+            libpulse alsa-lib libpipewire dbus systemd-libs libibus \
             vulkan-headers vulkan-icd-loader
           # Arch's `clang` package does not install the LLVM tools package.sh calls by name
           for t in llvm-ar llvm-nm llvm-ranlib llvm-strip; do ln -sf "$(command -v $t)" "/usr/bin/$t"; done
