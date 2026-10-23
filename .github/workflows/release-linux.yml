@@ -54,11 +54,15 @@ jobs:
             libxkbcommon wayland wayland-protocols libdecor libglvnd libdrm mesa \
             libpulse alsa-lib libpipewire dbus systemd-libs libibus \
             vulkan-headers vulkan-icd-loader
-          # Arch's `clang` package does not install the LLVM tools package.sh calls by name. The `llvm` package
-          # already puts them in /usr/bin, so only link what is missing: `ln -sf /usr/bin/llvm-ar /usr/bin/llvm-ar`
-          # is a no-op that still exits 1 ("are the same file").
-          for t in llvm-ar llvm-nm llvm-ranlib llvm-strip; do p=$(command -v $t) && [ "$p" = "/usr/bin/$t" ] || ln -sf "$p" "/usr/bin/$t"; done
-          ln -sf "$(command -v ld.lld)" /usr/bin/ld.lld
+
+      # Arch's `llvm` package installs llvm-ar / llvm-nm / llvm-ranlib / llvm-strip / ld.lld in /usr/bin, the names
+      # package.sh and build_deps.sh call. Check them instead of linking: an earlier version did `ln -sf` and failed
+      # on itself ("'/usr/sbin/llvm-ar' and '/usr/bin/llvm-ar' are the same file").
+      - name: Check the LLVM tools package.sh uses
+        run: |
+          for t in clang clang++ ld.lld llvm-ar llvm-nm llvm-ranlib llvm-strip; do
+            command -v "$t" >/dev/null || { echo "missing $t"; exit 1; }
+          done
           clang --version | head -1
 
       # The pinned source tarballs (SDL3, FFmpeg, shaderc, Vulkan-Headers, VMA). Keyed on build_deps.sh: a version or

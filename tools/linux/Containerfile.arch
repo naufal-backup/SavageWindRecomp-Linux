@@ -23,8 +23,6 @@ RUN pacman-key --init && pacman-key --populate archlinux \
         vulkan-headers vulkan-icd-loader \
     && rm -rf /var/cache/pacman/pkg/* /var/lib/pacman/sync/*
 
-# clang plus the LLVM tools package.sh calls (llvm-strip, llvm-ar, llvm-nm, llvm-ranlib) and the linker: Arch's
-# `clang` package alone does not provide them, the `llvm` package already installs them in /usr/bin. Only link what
-# is missing, so an already-correct path is not relinked onto itself. ld.lld is symlinked for build_deps.sh.
-RUN for t in llvm-ar llvm-nm llvm-ranlib llvm-strip; do p=$(command -v $t) && [ "$p" = "/usr/bin/$t" ] || ln -sf "$p" "/usr/bin/$t"; done \
-    && ln -sf "$(command -v ld.lld)" /usr/bin/ld.lld
+# Arch's `llvm` package installs llvm-strip / llvm-ar / llvm-nm / llvm-ranlib / ld.lld in /usr/bin, the names
+# package.sh and build_deps.sh call, so nothing needs linking: fail the image build if one is missing.
+RUN for t in clang clang++ ld.lld llvm-ar llvm-nm llvm-ranlib llvm-strip; do command -v "$t" >/dev/null || { echo "missing $t"; exit 1; }; done
