@@ -15,10 +15,10 @@ on:
         type: choice
         options: [x86_64, aarch64]
         default: x86_64
-      release:
-        description: Attach the AppImage to the GitHub release (needs a tag or a version to reuse)
-        type: boolean
-        default: false
+      tag:
+        description: Release tag to create or update (for example v0.2.0-alpha.2). Empty means artifact only.
+        type: string
+        default: ''
   push:
     tags: ['v*']
 
@@ -97,12 +97,33 @@ jobs:
             build/dist/SHA256SUMS
           if-no-files-found: error
 
-      - name: Attach to the release
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.release
+      # The release. The tag comes from the push (v0.2.0-alpha.2) or the `tag` input on a manual run; empty means
+      # artifact only. generate_release_notes makes the changelog: GitHub's own list of merged pull requests and
+      # commits since the previous tag, so no changelog file has to be kept in sync.
+      - name: Pick the project's own release notes, if any
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.tag != ''
+        id: notes
+        run: |
+          TAG="${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}"
+          if [ -f "docs/releases/$TAG.md" ]; then
+            echo "file=docs/releases/$TAG.md" >> "$GITHUB_OUTPUT"
+          else
+            echo "no note for $TAG: the generated changelog only"
+          fi
+
+      - name: Publish the release with a changelog
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.tag != ''
         uses: softprops/action-gh-release@v2
         with:
-          # a tag run has github.ref_name; a manual run needs a tag to attach to
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          name: Savage Wind Linux (${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }})
+          # the changelog: merged pull requests and commits since the previous tag
+          generate_release_notes: true
+          # docs/releases/<tag>.md, when the repo has one, is prepended: the project's own write-up (what the upstream
+          # Alpha 2 release has) plus the generated list. Empty when there is no note for the tag.
+          body_path: ${{ steps.notes.outputs.file }}
+          # -alpha.2 / -beta.1 tags are pre-releases, as upstream's are
+          prerelease: ${{ contains(github.ref_type == 'tag' && github.ref_name || inputs.tag, 'alpha') || contains(github.ref_type == 'tag' && github.ref_name || inputs.tag, 'beta') }}
           files: |
             build/dist/*.AppImage
             build/dist/SHA256SUMS
