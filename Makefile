@@ -305,8 +305,12 @@ appimage:
 appimages:
 	tools/linux/appimage.sh x86_64
 	tools/linux/appimage.sh aarch64
+# Arch Linux image instead of Ubuntu 22.04 (tools/linux/Containerfile.arch): the rolling toolchain, so the AppImage
+# needs a recent distribution. What .github/workflows/release-linux.yml runs.
+appimage-arch:
+	BASE=arch tools/linux/appimage.sh $(ARCH)
 
-.PHONY: dmg all gen gen-helper gen-objs runtime-objs deps deps-windows app dist appimage appimages
+.PHONY: dmg all gen gen-helper gen-objs runtime-objs deps deps-windows app dist appimage appimage-arch appimages
 
 build/test_shaders: tools/test_shaders.m runtime/nvn/maxwell/translate.c runtime/nvn/maxwell/shader.h
 	clang -O1 -fobjc-arc -framework Metal -framework Foundation -o $@ tools/test_shaders.m runtime/nvn/maxwell/translate.c

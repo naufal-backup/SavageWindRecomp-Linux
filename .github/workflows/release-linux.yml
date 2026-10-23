@@ -1,0 +1,103 @@
+# Builds the Linux AppImage in an Arch Linux container and uploads it as an artifact (and, on a tag, attaches it to
+# the GitHub release). The same tooling `make appimage` uses (tools/linux/build_deps.sh, gen_helper.sh, package.sh),
+# run directly inside the container instead of through podman (tools/linux/appimage.sh), so no daemon is needed.
+#
+# The build is Arch's, so the AppImage links against Arch's glibc and needs a recent distribution (Arch, CachyOS,
+# Fedora, the newest Ubuntu/Debian). For a glibc-2.35 build use tools/linux/Containerfile (Ubuntu 22.04) locally:
+# `make appimage`. No game files are involved: the AppImage builds the game code on the player's own machine.
+name: release-linux
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: Target architecture
+        type: choice
+        options: [x86_64, aarch64]
+        default: x86_64
+      release:
+        description: Attach the AppImage to the GitHub release (needs a tag or a version to reuse)
+        type: boolean
+        default: false
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  appimage:
+    name: AppImage (${{ inputs.arch || 'x86_64' }})
+    runs-on: ubuntu-latest
+    # Arch, not Ubuntu: the rolling toolchain, and the same image tools/linux/Containerfile.arch describes. clang /
+    # lld / llvm are recent enough for the __builtin_elementwise_* the lifted FP code uses (runtime/simd_fp.h).
+    container: archlinux:base-devel
+    timeout-minutes: 90
+    env:
+      ARCH: ${{ inputs.arch || 'x86_64' }}
+      # Arch ships python (3.14+), not the Ubuntu image's python3.12 gen_helper.sh defaults to.
+      PY: python3
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the toolchain and the SDL3 backend headers
+        run: |
+          pacman-key --init && pacman-key --populate archlinux
+          pacman -Syu --noconfirm --needed \
+            ca-certificates curl git file xz unzip patchelf make cmake ninja pkgconf nasm python \
+            clang lld llvm \
+            libx11 libxext libxrandr libxcursor libxi libxss libxfixes libxtst \
+            libxkbcommon wayland wayland-protocols libdecor libegl libglvnd libdrm libgbm \
+            libpulse libasound libpipewire dbus libudev libibus \
+            vulkan-headers vulkan-icd-loader
+          # Arch's `clang` package does not install the LLVM tools package.sh calls by name
+          for t in llvm-ar llvm-nm llvm-ranlib llvm-strip; do ln -sf "$(command -v $t)" "/usr/bin/$t"; done
+          ln -sf "$(command -v ld.lld)" /usr/bin/ld.lld
+          clang --version | head -1
+
+      # The pinned source tarballs (SDL3, FFmpeg, shaderc, Vulkan-Headers, VMA). Keyed on build_deps.sh: a version or
+      # checksum change there fetches afresh. Without this a run pulls and unpacks all five every time.
+      - name: Cache the pinned sources
+        uses: actions/cache@v4
+        with:
+          path: build/linux/src
+          key: linux-src-${{ hashFiles('tools/linux/build_deps.sh') }}
+
+      - name: Build the dependencies (SDL3, LGPL FFmpeg, shaderc, headers)
+        run: tools/linux/build_deps.sh "$ARCH"
+
+      - name: Freeze the game code generator (swgen)
+        run: tools/linux/gen_helper.sh "$ARCH"
+
+      - name: Package the AppImage
+        run: tools/linux/package.sh "$ARCH"
+
+      - name: Checksums
+        run: |
+          cd build/dist
+          sha256sum ./*.AppImage > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Upload the AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: Savage_Wind-${{ env.ARCH }}
+          path: |
+            build/dist/*.AppImage
+            build/dist/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release
+        uses: softprops/action-gh-release@v2
+        with:
+          # a tag run has github.ref_name; a manual run needs a tag to attach to
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          files: |
+            build/dist/*.AppImage
+            build/dist/SHA256SUMS
+          fail_on_unmatched_files: true

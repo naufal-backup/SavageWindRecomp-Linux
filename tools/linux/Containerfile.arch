@@ -1,0 +1,29 @@
+# Build environment for the Linux AppImages (tools/linux/appimage.sh): Arch Linux, base-devel, the rolling
+# toolchain. Built once per arch (podman build --arch amd64 / arm64); the amd64 image builds everything.
+#
+# Note: unlike tools/linux/Containerfile (Ubuntu 22.04, glibc 2.35), the AppImage built here links against Arch's
+# glibc, so it needs a recent distribution (Arch, CachyOS, Fedora, the newest Ubuntu/Debian). It is what
+# .github/workflows/release-linux.yml uses, and what `make appimage ARCH=... ` builds when pointed at this file.
+#
+# The distribution's SDL3 / FFmpeg / shaderc packages are NOT used: build_deps.sh builds SDL3, an LGPL-only FFmpeg,
+# shaderc and the Vulkan / VMA headers from pinned sources into build/linux/<arch>/deps. The packages below are the
+# toolchain and the X11 / Wayland / audio headers SDL3's backends are compiled against.
+FROM docker.io/library/archlinux:base-devel
+
+# pacman-key --init + the ring: the base image ships without an initialised keyring, so -Syu would fail on
+# "invalid or corrupted package (PGP signature)". --noconfirm keeps it non-interactive (fresh keyring, no prompts).
+RUN pacman-key --init && pacman-key --populate archlinux \
+    && pacman -Syu --noconfirm --needed \
+        ca-certificates curl git file xz unzip patchelf make cmake ninja pkgconf nasm python \
+        clang lld llvm \
+        # SDL3's video / audio / input backends (it loads them at run time; the headers decide what it can use)
+        libx11 libxext libxrandr libxcursor libxi libxss libxfixes libxtst \
+        libxkbcommon wayland wayland-protocols libdecor libegl libglvnd libdrm libgbm \
+        libpulse libasound libpipewire dbus libudev libibus \
+        vulkan-headers vulkan-icd-loader \
+    && rm -rf /var/cache/pacman/pkg/* /var/lib/pacman/sync/*
+
+# clang plus the LLVM tools package.sh calls (llvm-strip, llvm-ar, llvm-nm, llvm-ranlib) and the linker: Arch's
+# `clang` package alone does not provide them. ld.lld is symlinked for tools/linux/build_deps.sh's -fuse-ld=lld.
+RUN for t in llvm-ar llvm-nm llvm-ranlib llvm-strip; do ln -sf "$(command -v $t)" /usr/bin/$t; done \
+    && ln -sf "$(command -v ld.lld)" /usr/bin/ld.lld

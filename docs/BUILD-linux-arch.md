@@ -40,8 +40,28 @@ Run from the repo root (`extracted/` in the starting folder selects dev mode) or
 AppImage. `make appimage` builds the release AppImage in a podman container and does not
 need any of the above: only `podman`.
 
+## AppImage: Arch or Ubuntu, and the glibc floor
+
+Two build images, both driven by `tools/linux/appimage.sh`:
+
+| Command | Image | Needs at run time |
+|---|---|---|
+| `make appimage` | Ubuntu 22.04 (`tools/linux/Containerfile`) | glibc 2.35+ |
+| `make appimage-arch` / `make appimage BASE=arch` | Arch (`tools/linux/Containerfile.arch`) | a recent distribution |
+
+The Arch image is what `.github/workflows/release-linux.yml` builds, and it is the simpler
+one to get working: no PPA, no `python3.12`, just `pacman -Syu`. The trade-off is the glibc
+floor: the AppImage links against Arch's glibc, which is far newer than 2.35. Measured on a
+CachyOS build (glibc 2.44): the packaged `savagewind` requires **GLIBC_2.43**, so that
+AppImage runs on Arch/CachyOS/Fedora rawhide and future distributions, not on Ubuntu 24.04
+or Debian 13. Use `make appimage` (Ubuntu image) for an AppImage that must run on older
+distributions. Both build the same AppDir from `tools/linux/package.sh`.
+
 ## Notes
 
+- The `tools/linux/*.sh` scripts are executable in git (mode 100755). They were committed as
+  100644, which `make appimage` never noticed (podman runs them as an argument) but a CI job
+  calling them directly does: `Permission denied`. `tools/fetch_zig.sh` had the same problem.
 - The header's `-Wnullability-completeness` warnings are noise from VMA under clang and do
   not affect the build.
 - No `sudo` is needed for the prefix; keep it outside the repo so it stays untracked.
