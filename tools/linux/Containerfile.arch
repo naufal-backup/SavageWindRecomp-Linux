@@ -24,6 +24,7 @@ RUN pacman-key --init && pacman-key --populate archlinux \
     && rm -rf /var/cache/pacman/pkg/* /var/lib/pacman/sync/*
 
 # clang plus the LLVM tools package.sh calls (llvm-strip, llvm-ar, llvm-nm, llvm-ranlib) and the linker: Arch's
-# `clang` package alone does not provide them. ld.lld is symlinked for tools/linux/build_deps.sh's -fuse-ld=lld.
-RUN for t in llvm-ar llvm-nm llvm-ranlib llvm-strip; do ln -sf "$(command -v $t)" /usr/bin/$t; done \
+# `clang` package alone does not provide them, the `llvm` package already installs them in /usr/bin. Only link what
+# is missing, so an already-correct path is not relinked onto itself. ld.lld is symlinked for build_deps.sh.
+RUN for t in llvm-ar llvm-nm llvm-ranlib llvm-strip; do p=$(command -v $t) && [ "$p" = "/usr/bin/$t" ] || ln -sf "$p" "/usr/bin/$t"; done \
     && ln -sf "$(command -v ld.lld)" /usr/bin/ld.lld
